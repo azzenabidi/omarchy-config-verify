@@ -1,0 +1,153 @@
+# omarchy-config-verify
+
+Keep your Omarchy configs in sync with your dotfiles repo, even when a system
+update touches them.
+
+`omarchy update` runs migrations that can modify or replace your config files,
+and a careless `omarchy refresh` can wipe them entirely. This tool treats your
+git dotfiles repo as the source of truth, detects any file that no longer
+matches, and restores it — while never overwriting a file that looks like a
+legitimate new change.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## Features
+
+- **Report or restore** — check for drift by default, re-apply with `--apply`.
+- **Automatic** — installs a `post-update` hook so every `omarchy update`
+  verifies and restores your configs right after migrations run.
+- **Never clobbers newer files** — a drifted file that is newer than the repo
+  is kept and raises a desktop notification so you can decide (commit it, or
+  restore the repo version).
+- **Backups first** — anything it overwrites is saved to
+  `~/.dotfiles-verify-backup/` before the repo version is restored.
+- **Works with stow or copies** — restores symlinks as symlinks and real files
+  as copies.
+- **Zero dependencies** — plain bash, `git`, and standard coreutils.
+
+## Requirements
+
+- [Omarchy](https://omarchy.org/) (the `post-update` hook only exists there)
+- A git repo of your dotfiles, e.g. `~/dotfiles`, in a stow-friendly layout
+- `git` (always present on Omarchy)
+
+## Install
+
+```bash
+git clone https://github.com/azzenabidi/omarchy-config-verify
+cd omarchy-config-verify
+./install.sh
+```
+
+This installs the `omarchy-config-verify` command to `~/.local/bin` and wires
+the `post-update` hook into `~/.config/omarchy/hooks/post-update.d/`.
+
+## Usage
+
+```bash
+omarchy-config-verify              # report only; exits 1 if anything drifted
+omarchy-config-verify --apply      # restore drifted files (backing up first)
+omarchy-config-verify --help       # full usage and env vars
+omarchy-config-verify --version
+```
+
+That's it. From then on, every `omarchy update` runs the verify step
+automatically.
+
+### Configuration
+
+The dotfiles repo defaults to `~/dotfiles`. Point elsewhere with environment
+variables:
+
+```bash
+DOTFILES_DIR=/path/to/my-repo omarchy-config-verify
+VERIFY_BACKUP_DIR=/path/to/backups omarchy-config-verify --apply
+```
+
+## How it works
+
+```
+omarchy update
+  └─ system packages + migrations run
+       └─ post-update hook fires
+            └─ omarchy-config-verify --apply
+                 ├─ git ls-files         # every tracked file in the dotfiles repo
+                 ├─ map repo path → live path
+                 │    local/bin/*  →  ~/.local/bin/*
+                 │    everything else  →  $HOME/...
+                 ├─ compare with live:
+                 │    symlink → repo file?        ✓ ok
+                 │    real file, same content?    ✓ ok
+                 │    otherwise                   ✗ drift
+                 └─ for each drift:
+                      live file newer than repo?  → keep + notify
+                      else                        → backup, restore from repo
+```
+
+### The safety rule
+
+Before overwriting a drifted file, the tool asks a simple question:
+
+> Is the live file **newer** than the last repo commit that touched it?
+
+It compares the file's mtime against `git log -1 --format=%ct -- <file>` in
+your dotfiles repo. Using the *commit time* (not the checkout time) means a
+fresh `git pull` never makes the repo look newer than it really is.
+
+- **Live is newer** — likely an uncommitted change or a brand-new Omarchy
+  feature. The file is **kept**, listed as a conflict, and a desktop
+  notification is raised (exit code 1).
+- **Repo is newer, or the file is missing** — safe to restore from the repo.
+
+This is what lets new Omarchy features survive: features that *add* files
+(like setup hooks or plugins) are untracked, so the tool never touches them,
+and features that *modify* a tracked file make it "newer", so you get a
+notification instead of a silent revert.
+
+## Dotfiles repo layout
+
+The tool assumes a stow-style repo where each top-level directory is a package
+that maps into `$HOME`, plus an optional `local/bin/` for scripts:
+
+```
+~/dotfiles/
+├── hypr/.config/hypr/...       # → ~/.config/hypr/...
+├── omarchy/.config/omarchy/... # → ~/.config/omarchy/...
+├── opencode/, cliamp/, ...     # any other packages
+└── local/bin/script.sh         # → ~/.local/bin/script.sh
+```
+
+If your dotfiles repo uses a different layout, set `DOTFILES_DIR` and (if
+needed) adjust `repo_target()` in the script.
+
+## Uninstall
+
+```bash
+rm -f ~/.local/bin/omarchy-config-verify
+rm -f ~/.config/omarchy/hooks/post-update.d/verify-config.hook
+rm -rf ~/.dotfiles-verify-backup   # only if you don't want the backups
+```
+
+## FAQ
+
+**My config changed after an update but I got no notification.**
+The tool only fires on `omarchy update`. A plain `pacman -Syu` won't trigger
+it — run `omarchy-config-verify --apply` manually.
+
+**It restored an older version over a change I meant to keep.**
+Every overwrite is backed up first in `~/.dotfiles-verify-backup/`, so you can
+recover it. To prevent this, commit your changes to the dotfiles repo before
+running `omarchy update`.
+
+**It says a file is "newer than the dotfiles repo".**
+You (or a new Omarchy feature) changed it without updating the repo. Review it
+with `git -C ~/dotfiles status`, then either commit it or delete it and re-run
+`omarchy-config-verify --apply` to restore the repo version.
+
+**My dotfiles repo is on another machine.**
+The tool restores from the *local* clone. Run `git -C ~/dotfiles pull` before
+`omarchy update` so the local copy is current.
+
+## License
+
+[MIT](LICENSE)

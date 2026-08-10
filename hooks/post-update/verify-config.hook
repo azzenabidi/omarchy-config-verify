@@ -1,0 +1,4 @@
+#!/bin/bash
+# Restore user config changes after `omarchy update` if a migration or package
+# touched them. Backs up the changed version before restoring from dotfiles.
+exec "$HOME/.local/bin/omarchy-config-verify" --apply
