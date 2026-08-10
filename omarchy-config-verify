@@ -15,8 +15,17 @@
 
 set -euo pipefail
 
-VERSION="1.0.0"
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/dotfiles}"
+VERSION="1.1.0"
+
+# ~/.config/omarchy-config-verify.conf (written by install.sh) provides the
+# defaults; explicitly-set environment variables always win.
+CONF_FILE="${OMARCHY_CONFIG_VERIFY_CONF:-$HOME/.config/omarchy-config-verify.conf}"
+env_dotfiles_dir="${DOTFILES_DIR:-}"
+if [[ -f "$CONF_FILE" ]]; then
+  # shellcheck disable=SC1090
+  . "$CONF_FILE"
+fi
+DOTFILES_DIR="${env_dotfiles_dir:-${DOTFILES_DIR:-$HOME/dotfiles}}"
 BACKUP_BASE="${VERIFY_BACKUP_DIR:-$HOME/.dotfiles-verify-backup}"
 APPLY=0
 
@@ -32,6 +41,8 @@ case "${1:-}" in
     echo "Environment:"
     echo "  DOTFILES_DIR        dotfiles repo to verify against (default: ~/dotfiles)"
     echo "  VERIFY_BACKUP_DIR   backup location for overwritten files (default: ~/.dotfiles-verify-backup)"
+    echo
+    echo "Config file: $CONF_FILE (created by install.sh; env vars override it)"
     exit 0
     ;;
 esac
