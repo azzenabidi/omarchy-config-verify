@@ -67,7 +67,8 @@ omarchy-config-verify --version
 ```
 
 That's it. From then on, every `omarchy update` runs the verify step
-automatically.
+automatically. Re-run the installer's setup questions anytime with
+`./install.sh --reconfigure`.
 
 ### Configuration
 
@@ -146,6 +147,34 @@ rm -f ~/.local/bin/omarchy-config-verify
 rm -f ~/.config/omarchy/hooks/post-update.d/verify-config.hook
 rm -rf ~/.dotfiles-verify-backup   # only if you don't want the backups
 ```
+
+```bash
+rm -f ~/.local/bin/omarchy-config-verify
+rm -f ~/.config/omarchy/hooks/post-update.d/verify-config.hook
+rm -f ~/.config/omarchy-config-verify.conf   # installer settings
+rm -rf ~/.dotfiles-verify-backup              # only if you don't want the backups
+```
+
+## Limitations & edge cases
+
+- **New features that modify tracked files are kept, not reverted.** The tool
+  only flags and notifies you (it never silently overwrites). If a future
+  Omarchy feature legitimately changes a tracked file like `shell.json`, you
+  get a notification and must decide: commit the new version to your dotfiles,
+  or restore your old one. New features that only *add* files are untouched
+  automatically.
+- **The repo is the source of truth — keep it current.** The tool restores
+  from your *local* `~/dotfiles` clone, not from GitHub. If you edit configs on
+  another machine, `git pull` locally before updating so the local copy is
+  fresh.
+- **Only fires on `omarchy update`.** A bare `pacman -Syu` won't trigger the
+  hook; run `omarchy-config-verify --apply` manually.
+- **Filenames with spaces are not supported.** `git ls-files` output is parsed
+  word-by-word, so keep config filenames space-free.
+- **Never overrides your newer changes.** Any file you modify after its last
+  repo commit is treated as a conflict (kept + notified), even if an update
+  touched it too. Commit your edits to the repo before updating if you want
+  them protected.
 
 ## FAQ
 
